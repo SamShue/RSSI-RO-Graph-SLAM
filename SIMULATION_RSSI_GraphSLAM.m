@@ -223,6 +223,58 @@ plot(optimizedPoses(:,1), optimizedPoses(:,2), '-', 'Color', [0 .6 0], 'LineWidt
 
 legend('true anchors', 'optimized anchors', 'true path', 'dead-reckoned path', 'optimized path', 'Location', 'northeastoutside');
 
+% ------------------------------------------------------------------
+% Error metrics
+% Quantify how much the GraphSLAM solve improved on raw dead reckoning:
+% per-time-step pose error against the true trajectory (position and
+% heading), and per-anchor position error against the true anchor
+% locations, comparing the trilaterated seed to the optimized result.
+% ------------------------------------------------------------------
+time_s = (0:size(poseHistory,1)-1)' * simParams.dt_s;
+
+deadReckonedPosErr_m = sqrt(sum((poseHistory(:,1:2) - truePoseHistory(:,1:2)).^2, 2));
+optimizedPosErr_m    = sqrt(sum((optimizedPoses(:,1:2) - truePoseHistory(:,1:2)).^2, 2));
+
+deadReckonedHeadingErr_deg = rad2deg(abs(wrapToPi(poseHistory(:,3) - truePoseHistory(:,3))));
+optimizedHeadingErr_deg    = rad2deg(abs(wrapToPi(optimizedPoses(:,3) - truePoseHistory(:,3))));
+
+seenAnchors       = find(anchorInitialized);
+anchorTrilatErr_m = sqrt(sum((anchorEstimates(seenAnchors,:) - anchors(seenAnchors,:)).^2, 2));
+anchorOptErr_m    = sqrt(sum((optimizedAnchors(seenAnchors,:) - anchors(seenAnchors,:)).^2, 2));
+
+rmse = @(x) sqrt(mean(x.^2));
+fprintf('Position RMSE: dead-reckoned = %.3f m, optimized = %.3f m\n', ...
+    rmse(deadReckonedPosErr_m), rmse(optimizedPosErr_m));
+fprintf('Heading RMSE:  dead-reckoned = %.3f deg, optimized = %.3f deg\n', ...
+    rmse(deadReckonedHeadingErr_deg), rmse(optimizedHeadingErr_deg));
+fprintf('Anchor position RMSE: trilaterated seed = %.3f m, optimized = %.3f m\n', ...
+    rmse(anchorTrilatErr_m), rmse(anchorOptErr_m));
+
+figure('Name', 'GraphSLAM Error Metrics');
+
+subplot(3,1,1); hold on;
+plot(time_s, deadReckonedPosErr_m, '--', 'Color', [.7 .7 .7], 'LineWidth', 1.5);
+plot(time_s, optimizedPosErr_m, '-', 'Color', [0 .6 0], 'LineWidth', 1.5);
+xlabel('time (s)'); ylabel('position error (m)');
+title('Pose position error vs. true trajectory');
+legend('dead-reckoned', 'optimized', 'Location', 'northeast');
+grid on;
+
+subplot(3,1,2); hold on;
+plot(time_s, deadReckonedHeadingErr_deg, '--', 'Color', [.7 .7 .7], 'LineWidth', 1.5);
+plot(time_s, optimizedHeadingErr_deg, '-', 'Color', [0 .6 0], 'LineWidth', 1.5);
+xlabel('time (s)'); ylabel('heading error (deg)');
+title('Pose heading error vs. true trajectory');
+legend('dead-reckoned', 'optimized', 'Location', 'northeast');
+grid on;
+
+subplot(3,1,3); hold on;
+bar(seenAnchors, [anchorTrilatErr_m, anchorOptErr_m]);
+xlabel('anchor id'); ylabel('position error (m)');
+title('Anchor position error: trilaterated seed vs. optimized');
+legend('trilaterated seed', 'optimized', 'Location', 'northeast');
+grid on;
+
 function [atGoal] = atGoalPoint(robotPose, goalPoint)
     goalRadius_m = 0.25;
     dist = sqrt((robotPose(1) - goalPoint(1))^2 + (robotPose(2) - goalPoint(2))^2);
